@@ -1,0 +1,136 @@
+# Installing Flux
+
+This exercise steps through the installation of the Fluxctl command line interface, and the Flux operator.
+
+## Assumptions
+
+1. A functioning Kubernetes cluster (for zero-cost options, see the bottom of the file)
+2. An up-to-date installation of the `kubectl` CLI (https://kubernetes.io/docs/tasks/tools/install-kubectl/)
+3. A suitably configured and current kubeconfig (https://kubernetes.io/docs/concepts/configuration/organize-cluster-access-kubeconfig/)
+4. Git CLI installed (https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
+5. An account on GitHub (https://github.com)
+
+## Install Fluxctl
+
+Fluxctl is a command line interface for interacting with the Flux operator running in the Kubernetes cluster. It provides an interface for installing the Flux operator, and for configuring and querying its operation.
+
+Fluxctl can be installed using a package manager for your specific operating system, or by downloading the relevant binary from the Flux GitHub repository (https://github.com/fluxcd/flux/releases/latest).
+
+**Linux**
+
+Fluxctl can be installed using a snap (https://snapcraft.io/):
+
+sudo snap install fluxctl --classic
+
+For users of the Arch Linux distribution, a `fluxctl` package is available:
+
+pacman -S fluxctl
+
+**MacOS**
+
+brew install fluxctl
+
+**Windows**
+
+C:\> choco install fluxctl
+
+## Check Fluxctl
+
+From a terminal, check the version of `fluxctl` to make sure it was installed correctly:
+
+fluxctl version
+v1.21.0
+
+Take a look at the available sub-commands:
+
+fluxctl --help | less
+
+## Fork and Clone the App GitHub Repository
+
+The example app can be found on GitHub (https://github.com/nbrownuk/gitops-nginxhello). For you to make use of it, it needs to be forked and then cloned. There are two ways to achieve the fork and clone:
+
+1. First, find a suitable directory in which to work. For example, on Linux:
+
+    cd "$(mktemp -d -p .)"
+
+2. The first involves manually forking the app repository using the GitHub user interface, and then cloning the fork to your local environment:
+
+    git clone https://github.com/nbrownuk/gitops-nginxhello.git
+
+3. Achieve the same in one step using the `gh` CLI, which you'll need to install first (https://cli.github.com/):
+
+    gh repo fork https://github.com/nbrownuk/gitops-nginxhello.git --clone=true
+
+## Create a Namespace
+
+Create a namespace for the Flux operator to be deployed to:
+
+kubectl create namespace flux
+
+## Deploy Flux
+
+There are two techniques for deploying the Flux operator; 1) standard Kubernetes YAML resource manifests, 2) a Helm chart
+
+**Resource Manifests**
+
+The `fluxctl install` sub-command is used to generate the Kubernetes YAML for the API resources that make up the Flux operator. It needs some arguments to configure Flux (there are many more, but these are the important ones for this exercise):
+
+- `--namespace`: the target namespace created above
+- `--git-url`: the URL of the forked repo on GitHub
+- `--git-user`: the git user to use for commits
+- `--git-email`: the email address to use for git commits
+
+The output that `fluxctl install` creates can be piped directly to `kubectl` for application to the cluster, but if you'd prefer to review the manifests before applying them, use the `--output` flag and specify a pre-existing directory to store the manifests. Don't forget to insert your own GitHub username:
+
+export GIT_USER=<username>
+fluxctl install \
+  --namespace flux \
+  --git-url "git@github.com:${GIT_USER}/gitops-nginxhello.git" \
+  --git-user $GIT_USER \
+  --git-email "${GIT_USER}@users.noreply.github.com" | kubectl apply -f -
+
+**Helm**
+
+Flux also comes with a Helm chart for installation purposes (https://github.com/fluxcd/flux/tree/master/chart/flux). If this is your preferred method for installing applications on Kubernetes, use the chart to install Flux. If necessary, install the Helm CLI first (https://helm.sh/docs/intro/install/).
+
+Add the Flux Helm chart repository details to those configured for use by the Helm client:
+
+helm repo add fluxcd https://charts.fluxcd.io
+
+Install the Helm chart, being careful to set the appropriate template values for the chart:
+
+export GIT_USER=<username>
+helm upgrade -i flux fluxcd/flux \
+  --namespace flux \
+  --set git.url=git@github.com:${GIT_USER}/gitops-nginxhello.git \
+  --set git.user=${GIT_USER} \
+  --set git.email=${GIT_USER}@users.noreply.github.com
+
+## Check Flux is Running
+
+Query the Kubernete API to make sure that the Flux and Memcached pods start successfully:
+
+kubectl -n flux get all
+NAME                                  READY   STATUS    RESTARTS   AGE
+pod/flux-7b8759dc7c-gsh8w             1/1     Running   0          35s
+pod/flux-memcached-64f7865494-xj7bd   1/1     Running   0          35s
+
+NAME                     TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)     AGE
+service/flux             ClusterIP   10.104.186.122   <none>        3030/TCP    35s
+service/flux-memcached   ClusterIP   10.97.190.156    <none>        11211/TCP   35s
+
+NAME                             READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/flux             1/1     1            1           35s
+deployment.apps/flux-memcached   1/1     1            1           35s
+
+NAME                                        DESIRED   CURRENT   READY   AGE
+replicaset.apps/flux-7b8759dc7c             1         1         1       35s
+replicaset.apps/flux-memcached-64f7865494   1         1         1       35s
+
+## Local Kubernetes Cluster Options
+
+1. [k3d](https://k3d.io/)
+2. [kind](https://kind.sigs.k8s.io/)
+3. [minikube](https://minikube.sigs.k8s.io)
+4. [Microk8s](https://microk8s.io/)
+5. [Docker for Desktop](https://www.docker.com/products/docker-desktop)
